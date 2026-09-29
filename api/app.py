@@ -1691,6 +1691,7 @@ def get_training_documents_from_onedrive():
     })
 
 @app.route('/api/delete-all-data', methods=['DELETE'])
+@app.route('/api/data/delete_all', methods=['DELETE'])
 def delete_all_system_data():
     """Delete all Excel sheet data and uploaded files"""
     try:
@@ -1746,15 +1747,22 @@ def delete_all_system_data():
 
 
 @app.route('/api/compare/tests', methods=['POST'])
+@app.route('/api/analytics/compare', methods=['GET', 'POST'])
 def compare_pre_post_tests():
     """Compare Pre-Test and Post-Test results to measure training impact"""
     try:
-        data = request.get_json()
-        pre_test_id = data.get('pre_test_id')
-        post_test_id = data.get('post_test_id')
+        data = request.get_json(silent=True) or {}
+        pre_test_id = data.get('pre_test_id') or request.args.get('pre_test_id')
+        post_test_id = data.get('post_test_id') or request.args.get('post_test_id')
         
         if not pre_test_id or not post_test_id:
             return jsonify({"error": "Both pre_test_id and post_test_id are required"}), 400
+        
+        try:
+            pre_test_id = int(pre_test_id)
+            post_test_id = int(post_test_id)
+        except (ValueError, TypeError):
+            return jsonify({"error": "Test IDs must be valid integers"}), 400
         
         # Create database sessions
         db_session = get_db_session()
@@ -1948,6 +1956,44 @@ def compare_pre_post_tests():
                         "post_test_only_candidates": post_only_data
                     }
                 }
+                result["attendance"] = {
+                    "both_tests": len(common_candidates),
+                    "pre_only": list(pre_only_candidates),
+                    "post_only": list(post_only_candidates)
+                }
+                result["effectiveness"] = {
+                    "average_improvement": round(avg_improvement, 2),
+                    "positive_improvements": len(positive_improvements),
+                    "negative_improvements": len(negative_improvements),
+                    "effectiveness_index": round(training_effectiveness_index, 2),
+                    "improvement_bins": {
+                        "negative": len([imp for imp in improvements if imp['improvement'] < 0]),
+                        "low": len([imp for imp in improvements if 0 <= imp['improvement'] < 10]),
+                        "medium": len([imp for imp in improvements if 10 <= imp['improvement'] < 25]),
+                        "high": len([imp for imp in improvements if 25 <= imp['improvement'] < 50]),
+                        "significant": len([imp for imp in improvements if imp['improvement'] >= 50])
+                    }
+                }
+                result["improvers"] = {
+                    "top_10": [
+                        {
+                            'candidate_id': imp['candidate_id'],
+                            'pre_score': imp['pre_test_score'],
+                            'post_score': imp['post_test_score'],
+                            'improvement': imp['improvement']
+                        }
+                        for imp in improvements[:10]
+                    ],
+                    "declined": sorted([
+                        {
+                            'candidate_id': imp['candidate_id'],
+                            'pre_score': imp['pre_test_score'],
+                            'post_score': imp['post_test_score'],
+                            'improvement': imp['improvement']
+                        }
+                        for imp in improvements if imp['improvement'] < 0
+                    ], key=lambda x: x['improvement'])
+                }
                 
                 db_session.close()
                 return jsonify(result), 200
@@ -2088,6 +2134,44 @@ def compare_pre_post_tests():
                     "pre_test_only_candidates": pre_only_data,
                     "post_test_only_candidates": post_only_data
                 }
+            }
+            result["attendance"] = {
+                "both_tests": len(common_candidates),
+                "pre_only": list(pre_only_candidates),
+                "post_only": list(post_only_candidates)
+            }
+            result["effectiveness"] = {
+                "average_improvement": round(avg_improvement, 2),
+                "positive_improvements": len(positive_improvements),
+                "negative_improvements": len(negative_improvements),
+                "effectiveness_index": round(training_effectiveness_index, 2),
+                "improvement_bins": {
+                    "negative": len([imp for imp in improvements if imp['improvement'] < 0]),
+                    "low": len([imp for imp in improvements if 0 <= imp['improvement'] < 10]),
+                    "medium": len([imp for imp in improvements if 10 <= imp['improvement'] < 25]),
+                    "high": len([imp for imp in improvements if 25 <= imp['improvement'] < 50]),
+                    "significant": len([imp for imp in improvements if imp['improvement'] >= 50])
+                }
+            }
+            result["improvers"] = {
+                "top_10": [
+                    {
+                        'candidate_id': imp['candidate_id'],
+                        'pre_score': imp['pre_test_score'],
+                        'post_score': imp['post_test_score'],
+                        'improvement': imp['improvement']
+                    }
+                    for imp in improvements[:10]
+                ],
+                "declined": sorted([
+                    {
+                        'candidate_id': imp['candidate_id'],
+                        'pre_score': imp['pre_test_score'],
+                        'post_score': imp['post_test_score'],
+                        'improvement': imp['improvement']
+                    }
+                    for imp in improvements if imp['improvement'] < 0
+                ], key=lambda x: x['improvement'])
             }
             
             db_session.close()

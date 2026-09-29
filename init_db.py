@@ -18,9 +18,9 @@ def main():
     try:
         session = init_db()
         session.close()
-        print("✓ Database initialized successfully")
+        print("[OK] Database initialized successfully")
     except Exception as e:
-        print(f"✗ Error initializing database: {str(e)}")
+        print(f"[ERROR] Error initializing database: {str(e)}")
 
 if __name__ == "__main__":
     main()
